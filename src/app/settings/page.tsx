@@ -7,6 +7,7 @@ interface KeyField { label: string; key: string; placeholder: string; }
 
 const apiFields: KeyField[] = [
   { label: "OpenAI API Key", key: "openai", placeholder: "sk-..." },
+  { label: "Anthropic API Key (Claude 대체 모델)", key: "anthropic", placeholder: "sk-ant-..." },
   { label: "ElevenLabs API Key", key: "elevenlabs", placeholder: "el-..." },
   { label: "YouTube API Key", key: "youtube", placeholder: "AIza..." },
   { label: "Database URL", key: "database", placeholder: "postgresql://..." },
@@ -130,7 +131,7 @@ export default function SettingsPage() {
                   {testResults[key] === true && <CheckCircle className="w-4 h-4 text-emerald-500 shrink-0" />}
                   {testResults[key] === false && <AlertCircle className="w-4 h-4 text-red-400 shrink-0" />}
                 </div>
-                {(key === "openai" || key === "elevenlabs") && keys[key] && (
+                {(key === "openai" || key === "elevenlabs" || key === "anthropic") && keys[key] && (
                   <button
                     onClick={() => testKey(key)}
                     disabled={testing === key}

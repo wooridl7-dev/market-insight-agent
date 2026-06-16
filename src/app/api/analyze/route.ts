@@ -85,14 +85,7 @@ export async function POST(req: NextRequest) {
     // Build Excel data context
     const excelContext = JSON.stringify({ columns, totalRows, sampleRows, fullData: rows.slice(0, 100) }, null, 2);
 
-    // OpenAI analysis — try gpt-4o first, fallback to gpt-4o-mini on 429/quota error
-    const OpenAI = (await import("openai")).default;
-    const client = new OpenAI({ apiKey });
-
-    const messages: { role: "system" | "user"; content: string }[] = [
-      {
-        role: "system",
-        content: `당신은 주식·경제 데이터 분석 전문가입니다. 사용자가 업로드한 엑셀 데이터를 분석하고, 슈카월드 유튜브 콘텐츠의 경제 인사이트를 참고하여 종합적인 분석을 제공합니다.
+    const systemPrompt = `당신은 주식·경제 데이터 분석 전문가입니다. 사용자가 업로드한 엑셀 데이터를 분석하고, 슈카월드 유튜브 콘텐츠의 경제 인사이트를 참고하여 종합적인 분석을 제공합니다.
 
 분석 원칙:
 - 엑셀 데이터의 수치와 패턴을 정확히 파악합니다.
@@ -104,35 +97,17 @@ export async function POST(req: NextRequest) {
 ${ragContext}
 
 엑셀 데이터:
-${excelContext}`,
-      },
-      { role: "user", content: userPrompt },
-    ];
+${excelContext}`;
 
-    let completion;
-    try {
-      completion = await client.chat.completions.create({
-        model: "gpt-4o",
-        messages,
-        temperature: 0.3,
-        max_tokens: 2000,
-      });
-    } catch (firstErr: unknown) {
-      const status = (firstErr as { status?: number }).status;
-      if (status === 429 || status === 403) {
-        // Fallback to gpt-4o-mini
-        completion = await client.chat.completions.create({
-          model: "gpt-4o-mini",
-          messages,
-          temperature: 0.3,
-          max_tokens: 2000,
-        });
-      } else {
-        throw firstErr;
-      }
-    }
+    // Anthropic key from env or client form
+    const anthropicKey = process.env.ANTHROPIC_API_KEY || (formData.get("anthropicKey") as string) || "";
 
-    const analysis = completion.choices[0].message.content || "";
+    const analysis = await runWithFallback({
+      openaiKey: apiKey,
+      anthropicKey,
+      systemPrompt,
+      userPrompt,
+    });
 
     return NextResponse.json({
       analysis,
@@ -178,6 +153,77 @@ ${excelContext}`,
     }
     return NextResponse.json({ error: `분석 중 오류가 발생했습니다: ${message || "알 수 없는 오류"}` }, { status: 500 });
   }
+}
+
+// Model cascade: gpt-4o → gpt-4o-mini → gpt-3.5-turbo → claude-sonnet-4-5 → claude-haiku-4-5
+async function runWithFallback({
+  openaiKey,
+  anthropicKey,
+  systemPrompt,
+  userPrompt,
+}: {
+  openaiKey: string;
+  anthropicKey: string;
+  systemPrompt: string;
+  userPrompt: string;
+}): Promise<string> {
+  const isRateLimit = (err: unknown) => {
+    const e = err as { status?: number; message?: string };
+    return e.status === 429 || e.status === 403 || (e.message || "").includes("429");
+  };
+
+  // OpenAI cascade
+  if (openaiKey) {
+    const OpenAI = (await import("openai")).default;
+    const client = new OpenAI({ apiKey: openaiKey });
+    const openaiModels = ["gpt-4o", "gpt-4o-mini", "gpt-3.5-turbo"];
+
+    for (const model of openaiModels) {
+      try {
+        const res = await client.chat.completions.create({
+          model,
+          messages: [
+            { role: "system", content: systemPrompt },
+            { role: "user", content: userPrompt },
+          ],
+          temperature: 0.3,
+          max_tokens: 2000,
+        });
+        return res.choices[0].message.content || "";
+      } catch (err) {
+        if (isRateLimit(err)) continue; // try next model
+        throw err;
+      }
+    }
+  }
+
+  // Claude fallback
+  if (anthropicKey) {
+    const Anthropic = (await import("@anthropic-ai/sdk")).default;
+    const client = new Anthropic({ apiKey: anthropicKey });
+    const claudeModels = ["claude-sonnet-4-5", "claude-haiku-4-5-20251001"];
+
+    for (const model of claudeModels) {
+      try {
+        const res = await client.messages.create({
+          model,
+          max_tokens: 2000,
+          system: systemPrompt,
+          messages: [{ role: "user", content: userPrompt }],
+        });
+        const block = res.content[0];
+        return block.type === "text" ? block.text : "";
+      } catch (err) {
+        if (isRateLimit(err)) continue;
+        throw err;
+      }
+    }
+  }
+
+  throw Object.assign(
+    new Error("모든 AI 모델에서 요청 한도를 초과했습니다. OpenAI 또는 Anthropic 크레딧을 확인해주세요."),
+    { status: 429 }
+  );
 }
 
 function buildExcelSummary(rows: SheetRow[], columns: string[]): string {

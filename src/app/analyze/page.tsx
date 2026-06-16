@@ -79,6 +79,7 @@ export default function AnalyzePage() {
       form.append("file", file);
       form.append("prompt", finalPrompt);
       if (storedKeys.openai) form.append("openaiKey", storedKeys.openai);
+      if (storedKeys.anthropic) form.append("anthropicKey", storedKeys.anthropic);
 
       const res = await fetch("/api/analyze", { method: "POST", body: form });
       const data = await res.json();

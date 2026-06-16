@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 
 const schema = z.object({
-  provider: z.enum(["openai", "elevenlabs"]),
+  provider: z.enum(["openai", "elevenlabs", "anthropic"]),
   key: z.string().min(1),
 });
 
@@ -22,6 +22,17 @@ export async function POST(req: NextRequest) {
         headers: { "xi-api-key": key },
       });
       return NextResponse.json({ valid: res.ok });
+    }
+
+    if (provider === "anthropic") {
+      const Anthropic = (await import("@anthropic-ai/sdk")).default;
+      try {
+        const client = new Anthropic({ apiKey: key });
+        await client.models.list();
+        return NextResponse.json({ valid: true });
+      } catch {
+        return NextResponse.json({ valid: false });
+      }
     }
 
     return NextResponse.json({ valid: false });
