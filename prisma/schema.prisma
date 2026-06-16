@@ -1,0 +1,85 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Video {
+  id               String   @id @default(cuid())
+  youtubeVideoId   String   @unique @map("youtube_video_id")
+  title            String
+  url              String
+  description      String?  @db.Text
+  publishedAt      DateTime @map("published_at")
+  duration         String?
+  transcriptStatus String   @default("pending") @map("transcript_status")
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+  chunks           TranscriptChunk[]
+  @@map("videos")
+}
+
+model TranscriptChunk {
+  id          String   @id @default(cuid())
+  videoId     String   @map("video_id")
+  startTime   String?  @map("start_time")
+  endTime     String?  @map("end_time")
+  text        String   @db.Text
+  summary     String?  @db.Text
+  keywords    String[] @default([])
+  tickers     String[] @default([])
+  sector      String[] @default([])
+  embeddingId String?  @map("embedding_id")
+  createdAt   DateTime @default(now()) @map("created_at")
+  video       Video    @relation(fields: [videoId], references: [id], onDelete: Cascade)
+  @@index([videoId])
+  @@map("transcript_chunks")
+}
+
+model AgentConversation {
+  id          String   @id @default(cuid())
+  sessionId   String   @map("session_id")
+  role        String
+  message     String   @db.Text
+  citedChunks Json?    @map("cited_chunks")
+  createdAt   DateTime @default(now()) @map("created_at")
+  @@index([sessionId])
+  @@map("agent_conversations")
+}
+
+model ApiKey {
+  id        String   @id @default(cuid())
+  provider  String   @unique
+  encKey    String   @map("enc_key") @db.Text
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  @@map("api_keys")
+}
+
+model VoiceProfile {
+  id              String   @id @default(cuid())
+  name            String
+  providerVoiceId String   @map("provider_voice_id")
+  gender          String?
+  isDefault       Boolean  @default(false) @map("is_default")
+  isCloned        Boolean  @default(false) @map("is_cloned")
+  consentChecked  Boolean  @default(false) @map("consent_checked")
+  createdAt       DateTime @default(now()) @map("created_at")
+  @@map("voice_profiles")
+}
+
+model CollectionJob {
+  id            String    @id @default(cuid())
+  status        String    @default("pending")
+  startedAt     DateTime? @map("started_at")
+  finishedAt    DateTime? @map("finished_at")
+  videosChecked Int       @default(0) @map("videos_checked")
+  videosAdded   Int       @default(0) @map("videos_added")
+  chunksCreated Int       @default(0) @map("chunks_created")
+  errorMessage  String?   @map("error_message") @db.Text
+  createdAt     DateTime  @default(now()) @map("created_at")
+  @@map("collection_jobs")
+}

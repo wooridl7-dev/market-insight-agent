@@ -2,11 +2,12 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { TrendingUp, LayoutDashboard, BookOpen, Bot, Settings, Shield } from "lucide-react";
+import { TrendingUp, BookOpen, Bot, Settings, Shield, FileSpreadsheet } from "lucide-react";
 
 const navItems = [
   { href: "/brief", label: "Market Brief", icon: TrendingUp },
   { href: "/library", label: "RAG Library", icon: BookOpen },
+  { href: "/analyze", label: "Excel 분석", icon: FileSpreadsheet },
   { href: "/agent", label: "Agent", icon: Bot },
   { href: "/settings", label: "Settings", icon: Settings },
   { href: "/admin", label: "Admin", icon: Shield },
