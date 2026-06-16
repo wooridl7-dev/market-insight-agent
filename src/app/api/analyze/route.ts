@@ -85,16 +85,14 @@ export async function POST(req: NextRequest) {
     // Build Excel data context
     const excelContext = JSON.stringify({ columns, totalRows, sampleRows, fullData: rows.slice(0, 100) }, null, 2);
 
-    // OpenAI analysis
+    // OpenAI analysis — try gpt-4o first, fallback to gpt-4o-mini on 429/quota error
     const OpenAI = (await import("openai")).default;
     const client = new OpenAI({ apiKey });
 
-    const completion = await client.chat.completions.create({
-      model: "gpt-4o",
-      messages: [
-        {
-          role: "system",
-          content: `당신은 주식·경제 데이터 분석 전문가입니다. 사용자가 업로드한 엑셀 데이터를 분석하고, 슈카월드 유튜브 콘텐츠의 경제 인사이트를 참고하여 종합적인 분석을 제공합니다.
+    const messages: { role: "system" | "user"; content: string }[] = [
+      {
+        role: "system",
+        content: `당신은 주식·경제 데이터 분석 전문가입니다. 사용자가 업로드한 엑셀 데이터를 분석하고, 슈카월드 유튜브 콘텐츠의 경제 인사이트를 참고하여 종합적인 분석을 제공합니다.
 
 분석 원칙:
 - 엑셀 데이터의 수치와 패턴을 정확히 파악합니다.
@@ -107,15 +105,32 @@ ${ragContext}
 
 엑셀 데이터:
 ${excelContext}`,
-        },
-        {
-          role: "user",
-          content: userPrompt,
-        },
-      ],
-      temperature: 0.3,
-      max_tokens: 2000,
-    });
+      },
+      { role: "user", content: userPrompt },
+    ];
+
+    let completion;
+    try {
+      completion = await client.chat.completions.create({
+        model: "gpt-4o",
+        messages,
+        temperature: 0.3,
+        max_tokens: 2000,
+      });
+    } catch (firstErr: unknown) {
+      const status = (firstErr as { status?: number }).status;
+      if (status === 429 || status === 403) {
+        // Fallback to gpt-4o-mini
+        completion = await client.chat.completions.create({
+          model: "gpt-4o-mini",
+          messages,
+          temperature: 0.3,
+          max_tokens: 2000,
+        });
+      } else {
+        throw firstErr;
+      }
+    }
 
     const analysis = completion.choices[0].message.content || "";
 
@@ -138,9 +153,30 @@ ${excelContext}`,
         })),
       },
     });
-  } catch (err) {
+  } catch (err: unknown) {
     console.error("[analyze]", err);
-    return NextResponse.json({ error: "분석 중 오류가 발생했습니다." }, { status: 500 });
+    const status = (err as { status?: number }).status;
+    const message = (err as { message?: string }).message || "";
+
+    if (status === 429 || message.includes("429")) {
+      return NextResponse.json(
+        { error: "OpenAI API 요청 한도를 초과했습니다. 잠시 후 다시 시도하거나 OpenAI 계정의 크레딧을 확인해주세요." },
+        { status: 429 }
+      );
+    }
+    if (status === 401 || message.includes("401") || message.includes("Incorrect API key")) {
+      return NextResponse.json(
+        { error: "OpenAI API 키가 유효하지 않습니다. Settings에서 키를 다시 확인해주세요." },
+        { status: 401 }
+      );
+    }
+    if (status === 403 || message.includes("403")) {
+      return NextResponse.json(
+        { error: "OpenAI API 접근 권한이 없습니다. 계정 플랜 또는 키 권한을 확인해주세요." },
+        { status: 403 }
+      );
+    }
+    return NextResponse.json({ error: `분석 중 오류가 발생했습니다: ${message || "알 수 없는 오류"}` }, { status: 500 });
   }
 }
 
