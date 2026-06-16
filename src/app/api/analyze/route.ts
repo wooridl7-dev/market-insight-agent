@@ -16,18 +16,19 @@ interface RagChunk {
 
 export async function POST(req: NextRequest) {
   try {
-    const apiKey = process.env.OPENAI_API_KEY;
-    if (!apiKey) {
-      return NextResponse.json(
-        { error: "OpenAI API 키가 설정되지 않았습니다. Settings에서 등록해주세요." },
-        { status: 503 }
-      );
-    }
-
     const formData = await req.formData();
     const file = formData.get("file") as File;
     const userPrompt = (formData.get("prompt") as string) || "이 데이터를 분석해줘";
     const sheetName = (formData.get("sheet") as string) || undefined;
+    const clientKey = (formData.get("openaiKey") as string) || "";
+
+    const apiKey = process.env.OPENAI_API_KEY || clientKey;
+    if (!apiKey) {
+      return NextResponse.json(
+        { error: "OpenAI API 키가 설정되지 않았습니다. Settings 메뉴에서 등록해주세요." },
+        { status: 503 }
+      );
+    }
 
     if (!file) {
       return NextResponse.json({ error: "파일이 없습니다." }, { status: 400 });

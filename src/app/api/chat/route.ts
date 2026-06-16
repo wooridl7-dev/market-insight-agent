@@ -11,10 +11,11 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const { message, sessionId } = schema.parse(body);
 
-    const apiKey = process.env.OPENAI_API_KEY;
+    // Accept key from env OR from client header (set by Settings page via localStorage)
+    const apiKey = process.env.OPENAI_API_KEY || req.headers.get("x-openai-key") || "";
     if (!apiKey) {
       return NextResponse.json(
-        { error: "OpenAI API 키가 설정되지 않았습니다. Settings에서 등록해주세요." },
+        { error: "OpenAI API 키가 설정되지 않았습니다. Settings 메뉴에서 등록해주세요." },
         { status: 503 }
       );
     }

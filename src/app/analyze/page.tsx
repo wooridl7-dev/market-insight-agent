@@ -74,9 +74,11 @@ export default function AnalyzePage() {
     setResult(null);
 
     try {
+      const storedKeys = (() => { try { return JSON.parse(localStorage.getItem("mia_api_keys") || "{}"); } catch { return {}; } })();
       const form = new FormData();
       form.append("file", file);
       form.append("prompt", finalPrompt);
+      if (storedKeys.openai) form.append("openaiKey", storedKeys.openai);
 
       const res = await fetch("/api/analyze", { method: "POST", body: form });
       const data = await res.json();

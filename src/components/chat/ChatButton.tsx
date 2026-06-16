@@ -29,6 +29,10 @@ export default function ChatButton() {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
+  const getStoredKeys = () => {
+    try { return JSON.parse(localStorage.getItem("mia_api_keys") || "{}"); } catch { return {}; }
+  };
+
   const sendMessage = async (text: string) => {
     if (!text.trim() || loading) return;
     const userMsg: Message = { role: "user", content: text };
@@ -36,16 +40,31 @@ export default function ChatButton() {
     setInput("");
     setLoading(true);
 
-    await new Promise((r) => setTimeout(r, 1200));
-
-    const assistantMsg: Message = {
-      role: "assistant",
-      content:
-        "아직 OpenAI API 키가 설정되지 않았습니다. Settings 메뉴에서 API 키를 등록하면 실제 답변이 생성됩니다.",
-      sources: [],
-    };
-    setMessages((prev) => [...prev, assistantMsg]);
-    setLoading(false);
+    try {
+      const storedKeys = getStoredKeys();
+      const res = await fetch("/api/chat", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(storedKeys.openai && { "x-openai-key": storedKeys.openai }),
+        },
+        body: JSON.stringify({ message: text }),
+      });
+      const data = await res.json();
+      setMessages((prev) => [...prev, {
+        role: "assistant",
+        content: data.answer || data.error || "응답을 받지 못했습니다.",
+        sources: data.sources || [],
+      }]);
+    } catch {
+      setMessages((prev) => [...prev, {
+        role: "assistant",
+        content: "네트워크 오류가 발생했습니다. 다시 시도해주세요.",
+        sources: [],
+      }]);
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
